@@ -17,7 +17,6 @@ import functions
 
 # Local Recognition
 def localEmotionRecognition(img):
-    # print(img)
     img = cv2.resize(img, (740, 560))
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -103,42 +102,42 @@ returned_emotions = {
 }
 
 video_capture = cv2.VideoCapture(0)
-# ws = create_connection("ws://gitex.ahla.io:5555")
-while True:
-    ret, frame = video_capture.read()
-    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-    rgb_small_frame = small_frame[:, :, ::-1]
-    # Find all the faces and face encodings in the current frame of video
-    person = people.people()
-    face_locations = face_recognition.face_locations(rgb_small_frame)
-    face_encodings = face_recognition.face_encodings(
-        rgb_small_frame, face_locations)
-    if not face_locations == []:
-        facial_recognition = ThreadWithReturnValue(target=face_rec.personRecognition, args=(
-            face_encodings, known_people_encodings, known_people_name, small_frame, rgb_small_frame))
-        facial_recognition.start()
-        personData , personEncoding = facial_recognition.join()
-        emotionData = localEmotionRecognition(frame)
-        if not personEncoding == None:
-            known_people_name.append(personData['name'])
-            known_people_encodings.append(personEncoding[0])
-        person.setAllInfo(personData, emotionData)
+ws = create_connection("ws://gitex.ahla.io:5555")
+if ws is None :
+    ws = create_connection("ws://gitex.ahla.io:5555")
+else:
+    while True:
+        ret, frame = video_capture.read()
+        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+        rgb_small_frame = small_frame[:, :, ::-1]
+        # Find all the faces and face encodings in the current frame of video
+        person = people.people()
+        face_locations = face_recognition.face_locations(rgb_small_frame)
+        face_encodings = face_recognition.face_encodings(
+            rgb_small_frame, face_locations)
+        if not face_locations == []:
+            facial_recognition = ThreadWithReturnValue(target=face_rec.personRecognition, args=(
+                face_encodings, known_people_encodings, known_people_name, small_frame, rgb_small_frame))
+            facial_recognition.start()
+            personData , personEncoding = facial_recognition.join()
+            emotionData = localEmotionRecognition(frame)
+            if not personEncoding == None:
+                known_people_name.append(personData['name'])
+                known_people_encodings.append(personEncoding[0])
+                personData['personEncoding'] = ''
+            person.setAllInfo(personData, emotionData)
 
-        
-    cv2.imshow('Video', small_frame)
+        # cv2.imshow('Video', small_frame)
 
-    # Hit 'q' on the keyboard to quit!
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-    temp_Data= person.getPersonData()
-    # print(temp_Data)
-    if temp_person != temp_Data['personInfo']['name'] or temp_emotion != temp_Data['personEmotion']['mood']:
-        # ws.send(json.dumps(people.val))
-        temp_person = temp_Data['personInfo']['name']
-        temp_emotion = temp_Data['personEmotion']['mood']
-        print(temp_Data)
+        # Hit 'q' on the keyboard to quit!
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        temp_Data= person.getPersonData()
+        if temp_person != temp_Data['personInfo']['name'] or temp_emotion != temp_Data['personEmotion']['mood']:
+            ws.send(json.dumps(temp_Data))
+            temp_person = temp_Data['personInfo']['name']
+            temp_emotion = temp_Data['personEmotion']['mood']
 
 # Release handle to the webcam
-# ws.close()
 video_capture.release()
 cv2.destroyAllWindows()
