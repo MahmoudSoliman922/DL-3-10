@@ -6,7 +6,7 @@ import numpy as np
 from keras.preprocessing import image
 from keras.models import model_from_json
 
-from websocket import create_connection
+import websocket
 import base64
 import face_recognition
 
@@ -55,6 +55,33 @@ def localEmotionRecognition(img):
             returned_emotions['mood'] = 'Unknown'
     return returned_emotions
 
+# Local Recognition Dep
+face_cascade = cv2.CascadeClassifier(
+    'models/haarcascade_frontalface_default.xml')
+
+model = model_from_json(open(
+    "models/facial_expression_model_structure.json", "r").read())
+
+model.load_weights(
+        'models/facial_expression_model_weights.h5')
+
+
+emotions = ('angry', 'disgusted', 'confused',
+            'happy', 'sad', 'surprised', 'calm')
+
+returned_emotions = {
+    'mood': '',
+    'reactions': {
+        'happy': '0',
+        'sad': '0',
+        'angry': '0',
+        'calm': '0',
+                'disgusted': '0',
+                'confused': '0',
+                'surprised': '0'
+    }
+}
+
 # Open a file
 known_people_name = []
 known_people_encodings = []
@@ -74,70 +101,41 @@ for file in dirs:
     temp_encoding = np.load('data/' + file)
     known_people_encodings.append(temp_encoding)
 
-# Local Recognition Dep
-face_cascade = cv2.CascadeClassifier(
-    'haarcascade_frontalface_default.xml')
-
-model = model_from_json(open(
-    "facial_expression_model_structure.json", "r").read())
-
-model.load_weights(
-        'facial_expression_model_weights.h5')
-
-
-emotions = ('angry', 'disgusted', 'confused',
-            'happy', 'sad', 'surprised', 'calm')
-
-returned_emotions = {
-    'mood': '',
-    'reactions': {
-        'happy': '0',
-        'sad': '0',
-        'angry': '0',
-        'calm': '0',
-                'disgusted': '0',
-                'confused': '0',
-                'surprised': '0'
-    }
-}
-
 video_capture = cv2.VideoCapture(0)
-ws = create_connection("ws://gitex.ahla.io:5555")
-if ws is None :
-    ws = create_connection("ws://gitex.ahla.io:5555")
-else:
-    while True:
-        ret, frame = video_capture.read()
-        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-        rgb_small_frame = small_frame[:, :, ::-1]
-        # Find all the faces and face encodings in the current frame of video
-        person = people.people()
-        face_locations = face_recognition.face_locations(rgb_small_frame)
-        face_encodings = face_recognition.face_encodings(
-            rgb_small_frame, face_locations)
-        if not face_locations == []:
-            facial_recognition = ThreadWithReturnValue(target=face_rec.personRecognition, args=(
-                face_encodings, known_people_encodings, known_people_name, small_frame, rgb_small_frame))
-            facial_recognition.start()
-            personData , personEncoding = facial_recognition.join()
-            emotionData = localEmotionRecognition(frame)
-            if not personEncoding == None:
-                known_people_name.append(personData['name'])
-                known_people_encodings.append(personEncoding[0])
-                personData['personEncoding'] = ''
-            person.setAllInfo(personData, emotionData)
+while True:
+    try:
+        ws = websocket.create_connection("ws://gitex.ahla.io:5555")
+        while True:
+            ret, frame = video_capture.read()
+            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            rgb_small_frame = small_frame[:, :, ::-1]
+            # Find all the faces and face encodings in the current frame of video
+            person = people.people()
+            face_locations = face_recognition.face_locations(rgb_small_frame)
+            face_encodings = face_recognition.face_encodings(
+                rgb_small_frame, face_locations)
+            if not face_locations == []:
+                facial_recognition = ThreadWithReturnValue(target=face_rec.personRecognition, args=(
+                    face_encodings, known_people_encodings, known_people_name, small_frame, rgb_small_frame))
+                facial_recognition.start()
+                personData , personEncoding = facial_recognition.join()
+                emotionData = localEmotionRecognition(frame)
+                if not personEncoding == None:
+                    known_people_name.append(personData['name'])
+                    known_people_encodings.append(personEncoding[0])
+                    personData['personEncoding'] = ''
+                person.setAllInfo(personData, emotionData)
 
-        # cv2.imshow('Video', small_frame)
+                
+            cv2.imshow('Video', small_frame)
 
-        # Hit 'q' on the keyboard to quit!
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-        temp_Data= person.getPersonData()
-        if temp_person != temp_Data['personInfo']['name'] or temp_emotion != temp_Data['personEmotion']['mood']:
-            ws.send(json.dumps(temp_Data))
-            temp_person = temp_Data['personInfo']['name']
-            temp_emotion = temp_Data['personEmotion']['mood']
-
-# Release handle to the webcam
+            temp_Data= person.getPersonData()
+            if temp_person != temp_Data['personInfo']['name'] or temp_emotion != temp_Data['personEmotion']['mood']:
+                ws.send(json.dumps(temp_Data))
+                temp_person = temp_Data['personInfo']['name']
+                temp_emotion = temp_Data['personEmotion']['mood']
+                print(temp_Data)
+    except websocket.WebSocketConnectionClosedException:
+        print('Connection lost and trying to reconnect ...')
 video_capture.release()
 cv2.destroyAllWindows()
