@@ -1,3 +1,4 @@
+# this class acts as a overriding for a threding function to add the functionality of the return value
 import threading
 
 class ThreadWithReturnValue(threading.Thread):
